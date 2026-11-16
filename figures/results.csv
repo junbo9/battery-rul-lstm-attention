@@ -1,6 +1,0 @@
-model,MAE (EFC),RMSE (EFC),Median error (%),MAE std,Ensemble MAE (EFC)
-"Random forest, conditions only",203.0,270.6,40.1,,
-"Random forest, fade features",137.7,211.8,22.7,,
-LSTM + Swish,149.4,227.4,25.5,3.7,142.6
-LSTM + attention + ReLU,147.8,225.8,24.8,5.4,140.7
-LSTM + attention + Swish,147.4,220.8,25.5,4.6,140.4
