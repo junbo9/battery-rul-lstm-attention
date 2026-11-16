@@ -54,14 +54,11 @@ The LSTM's median error stays at or below 15% of total life from 6 weekly tests,
 
 ![Error against the number of weekly tests](figures/error_by_tests.png)
 
-The attention weights are close to uniform over the history, which is consistent with attention adding little beyond the LSTM state:
-
-![Attention weights](figures/attention_weights.png)
-
 ## Repository
 
 | Path | Content |
 | --- | --- |
+| `REPORT.md` | Project report: motivation, assumptions, method, results, observations, conclusions, references |
 | `02_train_models.ipynb` | Main notebook: models, training, evaluation, figures, and a form to predict RUL for your own cell |
 | `01_build_dataset.ipynb` | Builds `data/rul_steps.csv` from the raw dataset |
 | `data/rul_steps.csv` | Processed dataset: one row per weekly test of each cell |
