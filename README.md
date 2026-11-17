@@ -8,7 +8,7 @@
 
 ## Abstract
 
-How long a battery lasts depends heavily on how it is used, so a lifetime model is only useful if it works for usage patterns it has not seen before. I tested this for remaining useful life (RUL) prediction on the ISU-ILCC dataset, in which 245 lithium-polymer cells were cycled under 63 combinations of charge rate, discharge rate and depth of discharge. From the raw cycling records I built a table of 3,956 weekly capacity tests, each labelled with the RUL in equivalent full cycles (EFC). The main model is an LSTM that reads the tests in order, followed by a causal self-attention layer and a Swish-activated output head. Every model was tested only on experimental groups left out of training. The LSTM reached a mean absolute error of 147.4 EFC, or 140.4 EFC when five training runs were averaged. That is well below the 203.0 EFC of a random forest that only knows the usage conditions, but slightly worse than the 137.7 EFC of a random forest given the same inputs. Removing attention or replacing Swish with ReLU changed the error by less than the variation between training runs, and no model predicted well in the first 20% of a cell's life.
+How long a battery lasts depends heavily on how it is used, so a lifetime model is only useful if it works for usage patterns it has not seen before. I tested this for remaining useful life (RUL) prediction on the ISU-ILCC dataset, in which 245 lithium-polymer cells were cycled under 63 combinations of charge rate, discharge rate and depth of discharge. From the raw cycling records I built a table of 3,956 weekly capacity tests, each labelled with the RUL in equivalent full cycles (EFC). The main model is an LSTM that reads the tests in order, followed by a causal self-attention layer and a Swish-activated output head. Every model was tested only on experimental groups left out of training. The LSTM reached a mean absolute error of 147.4 EFC, or 140.4 EFC when five training runs were averaged. That is well below the 203.0 EFC of a random forest that only knows the usage conditions, but slightly worse than the 137.7 EFC of a random forest given the same inputs. Removing attention or replacing Swish with ReLU changed the error by less than the variation between training runs, and no model predicted well in the first 20% of a cell's life. To make that uncertainty visible, I also trained a quantile version of the LSTM. Its 10–90% range contained the true RUL for 73% of held-out tests and narrowed from about 665 EFC early in life to 88 EFC near the end, while the spread between training runs covered only 33%.
 
 **Index Terms:** lithium-ion battery, remaining useful life, LSTM, attention, Swish, deep learning
 
@@ -22,7 +22,7 @@ I started this project with my own laptop in mind. Its Windows battery report sh
 
 LSTM networks [1] are the usual tool for this, because capacity measurements arrive as a sequence [2], [3]. Most of that work, though, uses the NASA or CALCE datasets, where all cells share one or a few test conditions [4], [5]. A model can do well there simply by recognizing the condition. I wanted to know what happens when it cannot. If the test cells come from conditions absent from training, does an LSTM beat simpler models that get the same information, and do attention and Swish help?
 
-To answer this, I turned the raw records of 245 cells into a per-test RUL dataset, trained the LSTM with and without attention and Swish, and compared it with two random forests. All models were evaluated with cross-validation that always holds out whole experimental groups.
+To answer this, I turned the raw records of 245 cells into a per-test RUL dataset, trained the LSTM with and without attention and Swish, and compared it with two random forests. All models were evaluated with cross-validation that always holds out whole experimental groups. Because early predictions turned out to be poor, I also added a prediction range and checked how often it actually contains the true value.
 
 ## II. Related Work
 
@@ -105,7 +105,7 @@ $$
 \hat{y}_k = \mathbf{w}_2^{\top}\,\mathrm{swish}\left(W_1[\mathbf{h}_k;\mathbf{c}_k] + \mathbf{b}_1\right) + b_2
 $$
 
-with $\mathrm{swish}(z) = z\,\sigma(z)$ [10]. Swish is smooth and lets small negative values through, unlike ReLU (Fig. 7). The full model has 11,585 trainable parameters, and 6,337 without attention.
+with $\mathrm{swish}(z) = z\,\sigma(z)$ [10]. Swish is smooth and lets small negative values through, unlike ReLU (Fig. 8). The full model has 11,585 trainable parameters, and 6,337 without attention.
 
 **Fig. 1. Model.** The "LSTM + Swish" variant drops the attention branch, and the "attention + ReLU" variant replaces Swish with ReLU.
 
@@ -131,7 +131,20 @@ Two random forests [12] (300 trees, at least two samples per leaf) are trained o
 - **Conditions only** predicts the log total life from the three usage conditions. The RUL is the predicted total minus $\mathrm{EFC}_k$. This model never sees the cell's capacity.
 - **Fade features** gets the same seven inputs as the deep models at each test, but not the sequence. Capacity lost and fade slope give it a summary of the history.
 
-### E. Evaluation
+### E. Prediction intervals
+
+A single predicted value says nothing about how far off it might be. I compared two ways of attaching a range to each prediction:
+
+- **Spread of training runs**: the lowest and highest of the five LSTM runs' predictions.
+- **Quantile LSTM**: the same network with three outputs instead of one, trained to predict the 10th, 50th and 90th percentiles $\hat{y}^{(\tau)}$ of the log RUL with the pinball loss
+
+$$
+L_\tau = \max\left(\tau\,(y - \hat{y}^{(\tau)}),\ (\tau - 1)\,(y - \hat{y}^{(\tau)})\right), \qquad \tau \in \{0.1, 0.5, 0.9\}
+$$
+
+Under this loss, predicting too low costs nine times more than predicting too high for $\tau = 0.9$, which pushes that output toward the 90th percentile. The 10–90% range should therefore contain the true RUL 80% of the time. Training, early stopping and folds are the same as for the other deep models, and the five runs' percentiles are averaged. The share of held-out tests whose true RUL falls inside a range is its *coverage*.
+
+### F. Evaluation
 
 All models are evaluated with five-fold `GroupKFold` by experimental group, so every prediction is for a condition the model was not trained on. Each deep model is trained five times from different random seeds. I report MAE and root mean squared error (RMSE) in EFC, and the median relative error $|\hat{r}-r|/r$. The ensemble MAE is the error of the average of the five runs' predictions. I also break the error down by the share of life already used, $\mathrm{EFC}_k / \mathrm{EFC}_{\mathrm{EOL}}$. Three deep variants are compared: LSTM + Swish (no attention), LSTM + attention + ReLU, and LSTM + attention + Swish.
 
@@ -153,7 +166,7 @@ Table II shows the results. The biggest improvement comes from letting a model s
 
 Deep models: mean over five runs; ensemble = average of the five runs' predictions.
 
-The three deep variants are within 2.0 EFC of each other, while the same model trained from different random seeds varies by 3.7–5.4 EFC. The data cannot tell them apart. Fig. 5 in the appendix plots predicted against true RUL for the best model, and Fig. 4 follows four held-out cells through their life.
+The three deep variants are within 2.0 EFC of each other, while the same model trained from different random seeds varies by 3.7–5.4 EFC. The data cannot tell them apart. Fig. 6 in the appendix plots predicted against true RUL for the best model, and Fig. 5 follows four held-out cells through their life.
 
 ### B. Error over the life of a cell
 
@@ -167,7 +180,28 @@ Fig. 2 breaks the error down by how much of its life a cell has already used. In
 
 Getting the LSTM to this point took more work on training than on architecture. My first version (LSTM + Swish without attention, five inputs, full-batch training for 300 epochs) scored 159.1 EFC, clearly behind the random forest. I assumed it was undertrained and ran it for 800 epochs with a higher learning rate ($10^{-2}$) and a cosine schedule. The error went up to 199.3 EFC. The model was fitting the training conditions better and the new ones worse.
 
-What helped was close to the opposite of training longer: mini-batches, early stopping on held-out groups, and two extra inputs (capacity lost and fade slope). These changes brought the same architecture to 149.4 EFC. That 9.7 EFC gain is larger than anything attention or Swish produced. Fig. 6 in the appendix shows the validation curves used for early stopping.
+What helped was close to the opposite of training longer: mini-batches, early stopping on held-out groups, and two extra inputs (capacity lost and fade slope). These changes brought the same architecture to 149.4 EFC. That 9.7 EFC gain is larger than anything attention or Swish produced. Fig. 7 in the appendix shows the validation curves used for early stopping.
+
+### D. Prediction intervals
+
+Table III compares the two ranges. The spread between training runs is narrow and contains the true RUL only 33% of the time: the five runs agree with each other much more than they agree with reality. The quantile LSTM's 10–90% range is wider and contains the true RUL 73% of the time, a little short of the intended 80%. Its width follows the error pattern in Fig. 2, from about 665 EFC in the first 20% of life down to 88 EFC in the last 20%. Its median prediction has an MAE of 141.5 EFC, about the same as the five-run ensemble of the point model.
+
+**Table III. Coverage and median width of the prediction ranges on held-out groups**
+
+| Share of life used | Run spread: coverage | Run spread: width (EFC) | Quantile 10–90%: coverage | Quantile 10–90%: width (EFC) |
+| --- | --- | --- | --- | --- |
+| All | 32.6% | 106 | 73.2% | 362 |
+| 0–20% | 27.6% | 151 | 76.4% | 665 |
+| 20–40% | 31.3% | 152 | 74.4% | 493 |
+| 40–60% | 34.6% | 134 | 72.6% | 371 |
+| 60–80% | 33.6% | 98 | 73.5% | 253 |
+| 80–100% | 37.1% | 37 | 68.8% | 88 |
+
+Fig. 3 shows the range for the same four held-out cells as Fig. 5. For three of them the true RUL stays mostly inside the range. G63C4, the cell that outlived its group, stays above the range for most of its life.
+
+![10-90% prediction range for four held-out cells](figures/prediction_intervals.png)
+
+**Fig. 3.** Median prediction and 10–90% range of the quantile LSTM for four held-out cells.
 
 ## VI. Observations and Discussion
 
@@ -177,15 +211,17 @@ I think the LSTM did not beat the random forest for two reasons. First, the data
 
 Attention and Swish made no measurable difference. With sequences this short, the LSTM state already carries the history, so looking back over earlier states adds little. And in a network of about 11,000 parameters, the choice between Swish and ReLU in a two-layer head was unlikely to matter much.
 
-The early part of a cell's life is where every model struggles. In the first 20% of life the error is about 220 EFC, close to 28% of the median lifetime of 784 EFC. The fade curves in Fig. 3 show why. Capacity falls slowly at first and then drops sharply after a knee, and in the first few weeks a cell that will last 1,500 EFC looks much like one that will last 500.
+The early part of a cell's life is where every model struggles. In the first 20% of life the error is about 220 EFC, close to 28% of the median lifetime of 784 EFC. The fade curves in Fig. 4 show why. Capacity falls slowly at first and then drops sharply after a knee, and in the first few weeks a cell that will last 1,500 EFC looks much like one that will last 500.
 
-Some cells also lived much longer than others in the same group. For G63C4 (Fig. 4), every model predicted only about half to two-thirds of its true RUL early on. Nothing in its usage conditions or early capacity set it apart.
+Some cells also lived much longer than others in the same group. For G63C4 (Fig. 5), every model predicted only about half to two-thirds of its true RUL early on. Nothing in its usage conditions or early capacity set it apart, and even the quantile range missed it.
 
-This study has limitations. I chose the training settings using the same folds that produce the reported errors, so the deep-model errors are slightly optimistic. All cells were small 250 mAh cells tested at 30 °C with fixed currents, which may not carry over to batteries in real devices. Finally, the laptop that started the project could not be evaluated. It has no fade history yet, and its discharge rate (about 0.25C) is below the range of the data.
+The prediction ranges taught me something I had not expected. Training the same model five times looks like a natural way to measure uncertainty, but the runs mostly disagree about details, not about the cases that are actually hard. A range has to be trained for the job, as the quantile LSTM is, and even then it covered 73% instead of 80% on unseen conditions. The early-life range of about 665 EFC is wide, but it is an honest statement of how little the first weeks reveal.
+
+This study has limitations. I chose the training settings using the same folds that produce the reported errors, so the deep-model errors are slightly optimistic. The quantile ranges are also somewhat too narrow for unseen conditions. All cells were small 250 mAh cells tested at 30 °C with fixed currents, which may not carry over to batteries in real devices. Finally, the laptop that started the project could not be evaluated. It has no fade history yet, and its discharge rate (about 0.25C) is below the range of the data.
 
 ## VII. Conclusion
 
-On usage conditions it had never seen, the LSTM with attention and Swish cut the error of a conditions-only model by about 27%, from 203.0 to 147.4 EFC. It did not beat a random forest given the same inputs, and neither attention nor Swish made a measurable difference. The results changed with the inputs and the training procedure, not with the architecture.
+On usage conditions it had never seen, the LSTM with attention and Swish cut the error of a conditions-only model by about 27%, from 203.0 to 147.4 EFC. It did not beat a random forest given the same inputs, and neither attention nor Swish made a measurable difference. The results changed with the inputs and the training procedure, not with the architecture. A quantile version of the model gave a range that contained the true RUL 73% of the time, against 33% for the spread between training runs, and made the large early-life uncertainty explicit.
 
 If I continued this work, I would give the sequence model richer inputs, such as the full voltage-capacity curve recorded at each weekly test, which Severson *et al.* found useful early in life [6]. Early life is also where all of the models here were weakest.
 
@@ -221,23 +257,23 @@ If I continued this work, I would give the sequence model richer inputs, such as
 
 ![Capacity fade of every cell](figures/capacity_fade.png)
 
-**Fig. 3.** Capacity against equivalent full cycles for every cell, colored by depth of discharge. The dashed line marks the end of life (200 mAh).
+**Fig. 4.** Capacity against equivalent full cycles for every cell, colored by depth of discharge. The dashed line marks the end of life (200 mAh).
 
 ![True and predicted RUL of four held-out cells](figures/example_cells.png)
 
-**Fig. 4.** True and predicted RUL over the life of four held-out cells, chosen across the range of lifetimes.
+**Fig. 5.** True and predicted RUL over the life of four held-out cells, chosen across the range of lifetimes.
 
 ![Predicted against true RUL](figures/predicted_vs_true.png)
 
-**Fig. 5.** Predicted against true RUL for the LSTM + attention + Swish ensemble on held-out groups. Color shows the share of life already used.
+**Fig. 6.** Predicted against true RUL for the LSTM + attention + Swish ensemble on held-out groups. Color shows the share of life already used.
 
 ![Validation MAE during training](figures/early_stopping.png)
 
-**Fig. 6.** Validation MAE on the held-out training groups of the first fold during training. Dots mark the epochs kept by early stopping.
+**Fig. 7.** Validation MAE on the held-out training groups of the first fold during training. Dots mark the epochs kept by early stopping.
 
 ![Swish and ReLU](figures/swish_vs_relu.png)
 
-**Fig. 7.** The Swish and ReLU activation functions.
+**Fig. 8.** The Swish and ReLU activation functions.
 
 ## Appendix B. Code
 
