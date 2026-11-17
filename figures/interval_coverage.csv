@@ -1,0 +1,13 @@
+Interval,Share of life used,Coverage (%),Median width (EFC)
+Spread of five runs,All,32.6,106.2
+Spread of five runs,0-20%,27.6,151.1
+Spread of five runs,20-40%,31.3,151.5
+Spread of five runs,40-60%,34.6,133.7
+Spread of five runs,60-80%,33.6,97.8
+Spread of five runs,80-100%,37.1,36.8
+"Quantile LSTM, 10-90%",All,73.2,361.9
+"Quantile LSTM, 10-90%",0-20%,76.4,664.9
+"Quantile LSTM, 10-90%",20-40%,74.4,493.2
+"Quantile LSTM, 10-90%",40-60%,72.6,370.5
+"Quantile LSTM, 10-90%",60-80%,73.5,253.2
+"Quantile LSTM, 10-90%",80-100%,68.8,88.2
