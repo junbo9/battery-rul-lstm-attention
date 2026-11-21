@@ -26,6 +26,14 @@ This table is derived from the **ISU-ILCC Battery Aging Dataset** by `01_build_d
 - Download: https://doi.org/10.25380/iastate.22582234
 - 251 lithium-polymer cells (NMC cathode, graphite anode, 250 mAh), cycled at 30 °C under 63 combinations of charge rate, discharge rate and depth of discharge
 - Six cells are not in the table because they did not reach end of life or had missing records
+
+## How the cells were tested
+
+- 502030 lithium-polymer pouch cells (Shenzhen Honghaosheng Electronics), 3.0–4.2 V
+- Two 64-channel Neware BTS-4000 cyclers (Iowa State University and Iowa Lakes Community College), cells in incubators at 30 °C
+- Every cycle: constant-current, constant-voltage charge, then constant-current discharge to a voltage cutoff that sets the depth of discharge
+- Every 7 days a reference performance test (one full C/5 cycle and one full C/2 cycle); groups 20–64 have an extra test after the first 3.5 days. `capacity` is the C/5 discharge capacity of these tests
+- Groups 1–25 discharge at about 0.5C and vary the charge rate and depth of discharge; groups 26–64 vary all three factors
 - License: CC BY 4.0
 
 Citation: T. Li, Z. Zhou, A. Thelen, D. Howey, C. Hu. "Predicting Battery Lifetime Under Varying Usage Conditions from Early Aging Data." Cell Reports Physical Science, 2024. https://doi.org/10.48550/arXiv.2307.08382
