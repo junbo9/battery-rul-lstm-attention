@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Battery lifetime depends on how a battery is used, so a useful lifetime model must work for usage it has not seen. I predicted remaining useful life (RUL) for 245 lithium-polymer cells from the ISU-ILCC dataset, cycled under 63 combinations of charge rate, discharge rate and depth of discharge, and tested every model only on usage conditions left out of training. An LSTM with causal self-attention and a Swish output head reached a mean absolute error of 147.4 equivalent full cycles (EFC), far better than a random forest given only the usage conditions (203.0 EFC) but worse than one given the same inputs (137.7 EFC). The three LSTM variants were within 2.0 EFC of one another, and no model predicted well early in a cell's life. A quantile LSTM made this uncertainty visible, but its 10–90% range contained the true RUL for only 73% of held-out tests, and 69% late in life, against a target of 80%.
+Battery lifetime depends on usage, so a lifetime model must generalize to usage conditions not seen in training. This study predicts the remaining useful life (RUL) of 245 lithium-polymer cells from the ISU-ILCC dataset, cycled under 63 combinations of charge rate, discharge rate and depth of discharge, and evaluates every model only on usage conditions excluded from training. An LSTM with causal self-attention and a Swish output head achieved a mean absolute error (MAE) of 147.4 equivalent full cycles (EFC), 27% lower than that of a random forest using only the usage conditions (203.0 EFC) but higher than that of one using the same inputs (137.7 EFC). The three LSTM variants had MAEs within 2.0 EFC of one another, and all models had errors above 200 EFC in the first 20% of a cell's life. A quantile LSTM quantified this uncertainty, but its 10–90% prediction interval contained the true RUL for only 73% of held-out tests and 69% late in life, against a nominal 80%.
 
 **Index Terms:** lithium-ion battery, remaining useful life, LSTM, attention, Swish, deep learning
 
@@ -18,38 +18,32 @@ Battery lifetime depends on how a battery is used, so a useful lifetime model mu
 
 ### A. Why remaining useful life matters
 
-Every charge and discharge wears a lithium-ion battery down a little. Device and car makers define the end of a battery's useful life as a share of its original capacity. Apple, for example, designs the batteries of the iPhone 15 and of MacBooks to keep 80% of their original capacity after 1,000 full charge cycles under ideal conditions, and notes that the real result depends on how the device is used and charged [1]. Electric-vehicle (EV) batteries are usually warranted for at least 8 years and 100,000 miles, with replacement if the capacity falls to about 70% [2]. The remaining useful life (RUL) is how much use is left before that point; this project uses the common lab threshold of 80% of rated capacity. RUL matters to three groups:
-
-- **Owners** of phones, laptops and cars, who have to decide when to replace a battery or the whole device.
-- **Manufacturers**, who set warranties and need to know how much a given usage pattern shortens battery life.
-- **Second-life users and recyclers**, who buy retired EV batteries for stationary storage. Two used cells with the same capacity can still have very different remaining lives [3], so the capacity alone does not tell what a used battery is worth.
-
-A battery that wears out early also costs more than its price: replacing it means mining, manufacturing and disposal that could have been avoided [4].
+Lithium-ion batteries lose capacity with every charge and discharge, and their end of life is commonly defined as a fraction of the original capacity, for example 80% for smartphone and laptop batteries [1] and about 70% under typical electric-vehicle (EV) battery warranties [2]. The remaining useful life (RUL) is the amount of use left before this threshold; this study uses the common laboratory threshold of 80% of rated capacity. Accurate RUL prediction supports replacement decisions by device owners, warranty design by manufacturers and the valuation of retired EV batteries for second-life use, where cells with the same capacity can have very different remaining lives [3].
 
 ### B. Why usage makes RUL hard to predict
 
-How fast a battery fades depends on how it is used. Temperature, state of charge and current all speed up or slow down aging [4]. In a multi-year study at Sandia National Laboratories, cells of the same chemistry, all cycled within the manufacturer's limits, reached 80% capacity thousands of hours and cycles apart, depending only on how they were cycled [5].
+The rate of capacity fade depends on usage. Temperature, state of charge and current all affect the rate of aging [4]. In a multi-year study at Sandia National Laboratories, cells of the same chemistry cycled within the manufacturer's specifications reached 80% capacity thousands of hours and cycles apart, depending on the cycling conditions [5].
 
-The data used in this project shows the same effect (Fig. 1). Cells cycled between 20% and 40% depth of discharge lasted a median of 1,373 equivalent full cycles, against 545 for cells cycled deeper than 80%. Even cells cycled the same way differed: in the median experimental group, the longest-lived cell lasted 1.5 times as long as the shortest-lived one, and in one group 3.1 times as long. A useful RUL model therefore has to take usage into account, and it has to work for usage patterns it has not seen, because no lab can test every way people charge a phone or drive a car. My own laptop is such a case: its battery report shows 100.8% of design capacity after 125 cycles, so there is no fade curve to extend yet.
+The dataset used in this study shows the same effect (Fig. 1). Cells cycled at 20–40% depth of discharge had a median lifetime of 1,373 equivalent full cycles, compared with 545 for cells cycled beyond 80%. Lifetimes also varied among cells cycled under identical conditions: within the median experimental group, the longest-lived cell lasted 1.5 times as long as the shortest-lived one, and up to 3.1 times as long within a single group. An RUL model must therefore account for usage and generalize to usage patterns absent from the training data, since no test campaign can cover every way batteries are used in practice.
 
 ### C. Research question and contributions
 
-LSTM networks [6] are the usual tool for RUL prediction, because capacity measurements arrive as a sequence [7], [8]. Most of that work, though, uses the NASA or CALCE datasets, where all cells share one or a few test conditions [9], [10]. A model can do well there simply by recognizing the condition. I wanted to know what happens when it cannot. If the test cells come from conditions absent from training, does an LSTM beat simpler models that get the same information, and do attention and Swish help?
+Long short-term memory (LSTM) networks [6] are widely used for RUL prediction because capacity measurements form a time series [7], [8]. Most such studies, however, use the NASA or CALCE datasets, in which all cells share one or a few test conditions [9], [10], so a model can perform well simply by recognizing the condition. This study investigates whether an LSTM outperforms simpler models given the same information when the test cells come from usage conditions absent from training, and whether attention and the Swish activation improve its accuracy.
 
-The project makes four contributions:
+The main contributions of this study are as follows:
 
-1. **A per-test RUL dataset** built from the raw ISU-ILCC records: 3,956 capacity tests of 245 cells, each labelled with the RUL in equivalent full cycles and with usage conditions measured from the current records ([`data/rul_steps.csv`](data/rul_steps.csv)).
-2. **An LSTM with causal self-attention and a Swish output head**, compared with two random forests, one of which gets exactly the same inputs.
-3. **An evaluation on unseen usage conditions**: whole experimental groups are always held out, so no test cell shares its conditions with a training cell.
-4. **A prediction range**: a quantile version of the LSTM gives a 10–90% range, and I check how often that range actually contains the true RUL.
+1. **A per-test RUL dataset** constructed from the raw ISU-ILCC records: 3,956 capacity tests of 245 cells, each labelled with the RUL in equivalent full cycles and with usage conditions measured from the current records ([`data/rul_steps.csv`](data/rul_steps.csv)).
+2. **An LSTM with causal self-attention and a Swish output head**, compared with two random-forest baselines, one of which receives identical inputs.
+3. **An evaluation on unseen usage conditions**, in which entire experimental groups are held out, so that no test cell shares its conditions with a training cell.
+4. **Prediction intervals**: a quantile LSTM that provides 10–90% prediction intervals, with an assessment of their empirical coverage.
 
 ## II. Related Work
 
 RUL prediction methods are usually divided into model-based and data-driven approaches [9]. On the data-driven side, Liu *et al.* applied an LSTM to the CALCE datasets [7], and a comparison of a simple RNN, a GRU and an LSTM on the NASA dataset found the LSTM most accurate [8]. Later studies combine the LSTM with other components. Chen *et al.* add an attention mechanism (CA-LSTM) [9], and Tran *et al.* combine 1-D convolution, an attentional LSTM and an ODE-based LSTM [10]. Tran *et al.* also point out that some earlier methods were evaluated on as few as four cells discharged at constant current.
 
-Another line of work predicts lifetime from features measured early in life. Severson *et al.* predicted cycle life from how the discharge voltage curve changed over the first 100 cycles [11]. Li *et al.* created the ISU-ILCC dataset used here, varying charge rate, discharge rate and depth of discharge on purpose, and used it to predict lifetime under varying usage from early aging data [12], [13].
+Another line of work predicts lifetime from features measured early in life. Severson *et al.* predicted cycle life from how the discharge voltage curve changed over the first 100 cycles [11]. Li *et al.* created the ISU-ILCC dataset used here, deliberately varying the charge rate, discharge rate and depth of discharge, and used it to predict lifetime under varying usage from early aging data [12], [13].
 
-My model follows the common LSTM approach and adds the attention mechanism of [14] and the Swish activation of [15]. What differs is the evaluation: unseen usage conditions, and baselines that receive exactly the same inputs.
+The model in this study follows the common LSTM approach and adds the attention mechanism of [14] and the Swish activation of [15]. It differs from prior work mainly in its evaluation, which uses unseen usage conditions and baselines that receive identical inputs.
 
 ## III. Data and Assumptions
 
@@ -60,12 +54,12 @@ The ISU-ILCC battery aging dataset [13] was collected by Iowa State University (
 - **Cells.** 251 commercial 502030 lithium-polymer pouch cells (Shenzhen Honghaosheng Electronics) with an NMC cathode and a graphite anode, 250 mAh rated capacity and a 3.0–4.2 V operating window.
 - **Equipment.** Two 64-channel Neware BTS-4000 battery cyclers, one at each site. The cells were kept in incubators at 30 °C.
 - **Cycling.** Each cycle is a constant-current, constant-voltage (CC-CV) charge followed by a constant-current discharge. The discharge stops at a voltage cutoff chosen to give the group's DoD.
-- **Reference performance tests (RPTs).** After every 7 days of cycling, each cell went through one full cycle at C/5 and one at C/2. I use the capacity of the C/5 discharge. Groups 20–64 also had an RPT after the first 3.5 days to catch the early fade, and groups 30–64 had pulse tests for internal resistance, which I did not use.
+- **Reference performance tests (RPTs).** After every 7 days of cycling, each cell underwent one full cycle at C/5 and one at C/2; this study uses the capacity of the C/5 discharge. Groups 20–64 also had an RPT after the first 3.5 days to capture the early fade, and groups 30–64 had pulse tests for internal resistance, which were not used.
 - **End of test.** Cells were cycled until their capacity fell below 80% of the rated value.
 
-Each of the 63 experimental groups has its own charge rate, discharge rate and DoD (Fig. 1a). In groups 1–25 the discharge rate stayed near 0.5C while the charge rate (0.5–3C) and the DoD changed. Groups 26–64 spread all three factors over the whole range. Most groups have four cells; after the exclusions in Section III-B, 58 groups have four cells, four have three and one has one. Table I summarizes the cells used here, and Fig. 2 shows how the capacity of each one faded.
+Each of the 63 experimental groups has its own charge rate, discharge rate and DoD (Fig. 1a). In groups 1–25 the discharge rate was kept near 0.5C while the charge rate (0.5–3C) and the DoD were varied; groups 26–64 varied all three factors over the full range. Most groups have four cells; after the exclusions in Section III-B, 58 groups have four cells, four have three and one has one. Table I summarizes the cells used in this study, and Fig. 2 shows the capacity fade of each cell.
 
-**Table I. Dataset used in this project**
+**Table I. Dataset used in this study**
 
 | Item | Value |
 | --- | --- |
@@ -82,20 +76,20 @@ Each of the 63 experimental groups has its own charge rate, discharge rate and D
 
 ![Usage conditions and lifetimes of the dataset](figures/dataset_overview.png)
 
-**Fig. 1.** (a) Charge rate, discharge rate and depth of discharge of the 63 experimental groups. (b) Lifetime of the 245 cells, in equivalent full cycles until the capacity fell to 80% of rated. (c) Lifetime against depth of discharge. The vertical spread at one DoD includes cells of the same group, which were cycled the same way.
+**Fig. 1.** (a) Charge rate, discharge rate and depth of discharge of the 63 experimental groups. (b) Lifetime of the 245 cells, in equivalent full cycles until the capacity fell to 80% of rated. (c) Lifetime against depth of discharge. The vertical spread at a given DoD includes cells of the same group, which were cycled under identical conditions.
 
 ![Capacity fade of every cell](figures/capacity_fade.png)
 
 **Fig. 2.** Capacity against equivalent full cycles for every cell, colored by depth of discharge. The dashed line marks the end of life (200 mAh). Capacity falls slowly at first and then drops faster after a knee.
 
-### B. Raw files and how I used them
+### B. Raw data processing
 
 The dataset stores two JSON files for every cell, named by the cell ID (G36C4 is cell 4 of group 36), about 11 GB in total:
 
 - `RPT_json/G#C#.json`: for every RPT, the C/5 and C/2 charge and discharge capacities, the full voltage, current and charge traces, and the start and stop times.
 - `Cycling_json/G#C#.json`: for every regular cycle, the charged and discharged capacity, the start and stop times of the charge and discharge steps, and the full current, voltage and charge traces.
 
-The release also contains processed capacity-fade curves, a list of valid cells and a loading script. I did not use the processed curves, because they are indexed by time on test, while I needed the capacity discharged in every cycle to measure usage in equivalent full cycles. I processed the raw files in Google Colab with [`01_build_dataset.ipynb`](01_build_dataset.ipynb), which reduces them to the 0.5 MB table [`data/rul_steps.csv`](data/rul_steps.csv). Table II shows where each column comes from. I excluded six cells that never reached 80% capacity or had missing records. Among the cycles with a recorded start time, no discharge capacity was missing, so no values had to be filled. Five cycles had no start time (one each in G25C4 and G26C1–C4) and were left out of the EFC count, which changes it by at most 0.6 EFC.
+The release also contains processed capacity-fade curves, a list of valid cells and a loading script. The processed curves were not used because they are indexed by time on test, whereas measuring usage in equivalent full cycles requires the capacity discharged in every cycle. The raw files were therefore processed in Google Colab with [`01_build_dataset.ipynb`](01_build_dataset.ipynb), which reduces them to the 0.5 MB table [`data/rul_steps.csv`](data/rul_steps.csv); Table II shows how each column is derived. Six cells that never reached 80% capacity or had incomplete records were excluded. Among the cycles with a recorded start time, no discharge capacity was missing, so no values had to be filled. Five cycles had no start time (one each in G25C4 and G26C1–C4) and were excluded from the EFC count, which changes it by at most 0.6 EFC.
 
 **Table II. How each column of the table is computed from the raw files**
 
@@ -108,17 +102,17 @@ The release also contains processed capacity-fade curves, a list of valid cells 
 | `c_dis` | Cycling file: discharge current | Median current of each of the first 30 discharges, median over those cycles, divided by 0.25 A |
 | `dod` | Cycling file: discharged capacity | Median of the first 10 cycles divided by the first RPT capacity |
 
-I computed the usage conditions from the current records instead of copying them from the documentation, so that the same code would also work for a cell whose conditions are not documented. Section IV-B compares them with the documented protocol for every cell.
+The usage conditions were computed from the current records rather than taken from the documentation, so that the same procedure also applies to cells without documented conditions. Section IV-B compares them with the documented protocol for every cell.
 
 ### C. Labels
 
-A cycle does not mean the same thing across conditions. A cell cycled at 4% DoD ran more than 60,000 cycles, while one at 97% ran a few hundred. I therefore measured usage in *equivalent full cycles* (EFC): the cumulative discharged capacity divided by the rated capacity $Q_r = 0.25$ Ah,
+A cycle does not represent the same amount of use across conditions: a cell cycled at 4% DoD ran more than 60,000 cycles, whereas one at 97% ran a few hundred. Usage is therefore measured in *equivalent full cycles* (EFC): the cumulative discharged capacity divided by the rated capacity $Q_r = 0.25$ Ah,
 
 $$
 \mathrm{EFC}_k = \frac{1}{Q_r}\sum_{j \in \mathcal{C}_k} q_j
 $$
 
-where $\mathcal{C}_k$ is the set of cycles that started before test $k$ and $q_j$ is the capacity discharged in cycle $j$. If test $k$ is the first with capacity $C_k$ below $0.8\,Q_r = 0.2$ Ah, the end of life (EOL) lies between tests $k-1$ and $k$, and I interpolate it:
+where $\mathcal{C}_k$ is the set of cycles that started before test $k$ and $q_j$ is the capacity discharged in cycle $j$. If test $k$ is the first with capacity $C_k$ below $0.8\,Q_r = 0.2$ Ah, the end of life (EOL) lies between tests $k-1$ and $k$ and is obtained by linear interpolation:
 
 $$
 \mathrm{EFC}_{\mathrm{EOL}} = \mathrm{EFC}_{k-1} + \frac{C_{k-1} - 0.2}{C_{k-1} - C_k}\left(\mathrm{EFC}_k - \mathrm{EFC}_{k-1}\right)
@@ -126,7 +120,7 @@ $$
 
 The label at every earlier test is then $\mathrm{RUL}_k = \mathrm{EFC}_{\mathrm{EOL}} - \mathrm{EFC}_k$.
 
-**Worked example.** Table III shows the seven tests of cell G36C4 (charge 2.07C, discharge 0.50C, DoD 93%) before its end of life. The eighth test measured less than 200 mAh, so the end of life lies between the seventh and eighth tests and was interpolated at 284.9 EFC. Each RUL is 284.9 minus the EFC used so far. The second test is closer to the first than the others because of the extra RPT after half a week. The seven rows, with the three conditions repeated on every row, are exactly one input sequence for the LSTM; at test 1 the conditions stand for the protocol, which is known in advance (Section IV-B). Capacity lost and fade slope are explained in Section IV-B.
+**Worked example.** Table III lists the seven tests of cell G36C4 (charge 2.07C, discharge 0.50C, DoD 93%) before its end of life. The eighth test measured below 200 mAh, so the EOL was interpolated at 284.9 EFC between the seventh and eighth tests, and each RUL equals 284.9 EFC minus the EFC accumulated up to that test. The interval between the first two tests is shorter because of the additional RPT after 3.5 days. Together with the three usage conditions repeated on every row, these seven rows form exactly one input sequence for the LSTM; at test 1 the conditions represent the cycling protocol, which is assumed to be known in advance. The capacity lost, the fade slope and this assumption are detailed in Section IV-B.
 
 **Table III. The seven capacity tests of cell G36C4**
 
@@ -142,17 +136,17 @@ The label at every earlier test is then $\mathrm{RUL}_k = \mathrm{EFC}_{\mathrm{
 
 ### D. Assumptions
 
-Three assumptions shape how the results should be read. First, each cell's usage protocol is known before testing and stays constant. In reality an aging cell delivers less per cycle, because discharge stops at a fixed voltage (G1C1: 0.070 Ah in its first cycle, 0.048 Ah at the median), so I use the initial DoD, the value known in advance. Second, cells in the same group are interchangeable, which is why test cells always come from groups absent from training. Third, EFC is a fair measure of life; the cells were cycled continuously, so calendar aging is not captured.
+The results rest on three assumptions. First, each cell's usage protocol is known before testing and remains constant. In practice, the charge delivered per cycle decreases with aging because discharge terminates at a fixed voltage (G1C1: 0.070 Ah in its first cycle and 0.048 Ah at the median); the initial DoD is therefore used, as it is the value known in advance. Second, cells within a group are interchangeable, which is why test cells are always drawn from groups absent from training. Third, EFC is an adequate measure of life; because the cells were cycled continuously, calendar aging is not captured.
 
 ## IV. Methodology
 
 ### A. Pipeline overview
 
-Fig. 3 shows the whole project, from the raw files to a prediction for a new cell. Steps 1–2 are in [`01_build_dataset.ipynb`](01_build_dataset.ipynb) and steps 3–8 in [`02_train_models.ipynb`](02_train_models.ipynb).
+Fig. 3 summarizes the workflow from the raw files to the prediction for a new cell. Steps 1–2 are implemented in [`01_build_dataset.ipynb`](01_build_dataset.ipynb) and steps 3–8 in [`02_train_models.ipynb`](02_train_models.ipynb).
 
-![Pipeline from raw records to prediction](figures/pipeline.png)
+![Workflow from raw records to prediction](figures/pipeline.png)
 
-**Fig. 3.** Pipeline of the project.
+**Fig. 3.** Workflow of this study. Gray: data preparation. Yellow: training and testing on experimental groups excluded from training.
 
 1. **Raw records.** Read the RPT file and the cycling file of each of the 251 cells.
 2. **Per-test table.** Make one row per RPT before the end of life, with the capacity, the EFC used so far, the RUL label and the three usage conditions (Section III). Six cells without a usable end of life are dropped, leaving 3,956 rows for 245 cells.
@@ -160,12 +154,12 @@ Fig. 3 shows the whole project, from the raw files to a prediction for a new cel
 4. **Sequences.** Turn each cell into one sequence of its tests in time order. Cells have 2 to 59 tests, so the sequences are padded to 59 steps and a mask marks the real ones. The whole input is a 245 × 59 × 7 array. Padded steps are left out of the loss, the attention and the error metrics.
 5. **Group split.** Split the 63 groups into five folds with `GroupKFold`. Each fold tests on 12–13 groups (48–50 cells, 710–919 tests) and trains on the rest, and 20% of the training groups are set aside again for early stopping. No group is ever split between training and testing.
 6. **Train.** Train three LSTM variants and the quantile LSTM, each with five random seeds in each of the five folds (100 networks), and the two random forests once per fold (Sections IV-C to IV-E).
-7. **Evaluate.** Predict the RUL at every test of every held-out cell. At test $k$ the deep models use only tests 1 to $k$. Compute the error metrics, the error by stage of life and the coverage of the prediction ranges (Section IV-E).
-8. **Predict a new cell.** The last section of the training notebook retrains the models on all 245 cells and has a form: enter a cell's capacity at each test, the EFC used and its usage conditions, and it returns the predicted RUL with its 10–90% range.
+7. **Evaluate.** Predict the RUL at every test of every held-out cell. At test $k$ the deep models use only tests 1 to $k$. Compute the error metrics, the error by stage of life and the coverage of the prediction intervals (Section IV-E).
+8. **Predict a new cell.** The last section of the training notebook retrains the models on all 245 cells and provides a form: given a cell's capacity at each test, the EFC used and its usage conditions, it returns the predicted RUL with its 10–90% prediction interval.
 
 ### B. Problem formulation
 
-For cell $i$ with tests $k = 1, \dots, T_i$, the model sees the sequence $\mathbf{x}_{i,1}, \dots, \mathbf{x}_{i,k}$ and predicts $\mathrm{RUL}_{i,k}$. Each test has seven inputs: the measured capacity $C_k$, $\mathrm{EFC}_k$, the capacity lost so far $C_1 - C_k$, the recent fade slope
+For cell $i$ with tests $k = 1, \dots, T_i$, the model receives the sequence $\mathbf{x}_{i,1}, \dots, \mathbf{x}_{i,k}$ and predicts $\mathrm{RUL}_{i,k}$. Each test has seven inputs: the measured capacity $C_k$, $\mathrm{EFC}_k$, the capacity lost so far $C_1 - C_k$, the recent fade slope
 
 $$
 s_k = \frac{C_k - C_{k-2}}{\mathrm{EFC}_k - \mathrm{EFC}_{k-2}} \quad (s_1 = s_2 = 0)
@@ -177,7 +171,7 @@ and the three usage conditions. Inputs are standardized with training statistics
 
 ### C. Model and training
 
-An LSTM with 32 hidden units reads the tests in order, so its state $\mathbf{h}_k$ depends only on tests up to $k$. A single-head self-attention layer [14] then lets each step look back over all earlier states:
+An LSTM with 32 hidden units processes the tests in order, so its state $\mathbf{h}_k$ depends only on tests up to $k$. A single-head self-attention layer [14] then allows each step to attend to all earlier states:
 
 $$
 \alpha_{kj} = \mathrm{softmax}_{j \le k}\left(\frac{(W_Q\mathbf{h}_k)^{\top} W_K\mathbf{h}_j}{\sqrt{d}}\right), \qquad
@@ -190,9 +184,9 @@ $$
 \hat{y}_k = \mathbf{w}_2^{\top}\,\mathrm{swish}\left(W_1[\mathbf{h}_k;\mathbf{c}_k] + \mathbf{b}_1\right) + b_2
 $$
 
-with $\mathrm{swish}(z) = z\,\sigma(z)$ [15]. Swish is smooth and lets small negative values through, unlike ReLU (Fig. 10). The full model has 11,585 trainable parameters, and 6,337 without attention.
+with $\mathrm{swish}(z) = z\,\sigma(z)$ [15]. Unlike ReLU, Swish is smooth and passes small negative values (Fig. 10). The full model has 11,585 trainable parameters, and 6,337 without attention.
 
-**Fig. 4. Model.** The "LSTM + Swish" variant drops the attention branch, and the "attention + ReLU" variant replaces Swish with ReLU.
+**Fig. 4. Model.** The "LSTM + Swish" variant omits the attention branch, and the "attention + ReLU" variant replaces Swish with ReLU.
 
 ```mermaid
 flowchart TD
@@ -205,35 +199,35 @@ flowchart TD
     F --> G["log RUL_k (EFC)"]
 ```
 
-The loss is the mean squared error of $\hat{y}_k$ over the real (unpadded) steps. I used Adam [16] with a learning rate of $3\times10^{-3}$, weight decay $10^{-4}$ and mini-batches of 32 cells, and initialized the output bias to the mean target. Training uses early stopping: 20% of the training groups are held out, the validation MAE is checked every two epochs, and training stops after 20 epochs without improvement (120 at most), keeping the best weights. Section V-C explains why this turned out to matter.
+The loss is the mean squared error of $\hat{y}_k$ over the real (unpadded) steps. The model is trained with Adam [16] at a learning rate of $3\times10^{-3}$ with weight decay $10^{-4}$ and mini-batches of 32 cells, and the output bias is initialized to the mean target. Training uses early stopping: 20% of the training groups are held out, the validation MAE is checked every two epochs, and training stops after 20 epochs without improvement (120 at most), keeping the best weights. The effect of these training choices is examined in Section V-C.
 
 ### D. Prediction intervals
 
-A single predicted value says nothing about how far off it might be. I compared two ways of attaching a range to each prediction:
+A point prediction conveys no information about its uncertainty. Two methods of attaching an interval to each prediction were compared:
 
-- **Spread of training runs**: the lowest and highest of the five LSTM runs' predictions.
+- **Spread of training runs**: the interval between the lowest and highest predictions of the five LSTM runs.
 - **Quantile LSTM**: the same network with three outputs instead of one, trained to predict the 10th, 50th and 90th percentiles $\hat{y}^{(\tau)}$ of the log RUL with the pinball loss
 
 $$
 L_\tau = \max\left(\tau\,(y - \hat{y}^{(\tau)}),\ (\tau - 1)\,(y - \hat{y}^{(\tau)})\right), \qquad \tau \in \{0.1, 0.5, 0.9\}
 $$
 
-Under this loss, predicting too low costs nine times more than predicting too high for $\tau = 0.9$, which pushes that output toward the 90th percentile. The 10–90% range should therefore contain the true RUL 80% of the time. Training, early stopping and folds are the same as for the other deep models, and the five runs' percentiles are averaged. The share of held-out tests whose true RUL falls inside a range is its *coverage*.
+For $\tau = 0.9$, under-prediction is penalized nine times more heavily than over-prediction, which drives that output toward the 90th percentile. A well-calibrated 10–90% interval therefore contains the true RUL 80% of the time. Training, early stopping and folds are the same as for the other deep models, and the five runs' percentiles are averaged. The share of held-out tests whose true RUL falls inside an interval is its *coverage*.
 
 ### E. Evaluation and baselines
 
-All models are evaluated with five-fold `GroupKFold` by experimental group, so every prediction is for a condition the model was not trained on. Each deep model is trained five times from different random seeds. I report MAE and root mean squared error (RMSE) in EFC, and the median relative error $|\hat{r}-r|/r$. The ensemble MAE is the error of the average of the five runs' predictions. I also break the error down by the share of life already used, $\mathrm{EFC}_k / \mathrm{EFC}_{\mathrm{EOL}}$. Three deep variants are compared: LSTM + Swish (no attention), LSTM + attention + ReLU, and LSTM + attention + Swish.
+All models are evaluated with five-fold `GroupKFold` by experimental group, so every prediction is for a condition the model was not trained on. Each deep model is trained five times from different random seeds. Performance is reported as MAE and root mean squared error (RMSE) in EFC, and as the median relative error $|\hat{r}-r|/r$. The ensemble MAE is the error of the average of the five runs' predictions. The error is also broken down by the share of life already used, $\mathrm{EFC}_k / \mathrm{EFC}_{\mathrm{EOL}}$. Three deep variants are compared: LSTM + Swish (no attention), LSTM + attention + ReLU, and LSTM + attention + Swish.
 
 Two random forests [17] (300 trees, at least two samples per leaf) are trained on the same folds:
 
-- **Conditions only** predicts the log total life from the three usage conditions. The RUL is the predicted total minus $\mathrm{EFC}_k$. This model never sees the cell's capacity.
-- **Fade features** gets the same seven inputs as the deep models at each test, but not the sequence. Capacity lost and fade slope give it a summary of the history.
+- **Conditions only** predicts the log total life from the three usage conditions. The RUL is the predicted total minus $\mathrm{EFC}_k$. This model does not use any capacity measurement of the cell.
+- **Fade features** receives the same seven inputs as the deep models at each test, but not the sequence; the capacity lost and fade slope provide a summary of the history.
 
 ## V. Results
 
 ### A. Model comparison
 
-Table IV shows the results. The biggest improvement comes from letting a model see the capacity history at all: the error falls from 203.0 EFC for the conditions-only forest to 137.7–149.4 EFC for the other models. Among those, the random forest on fade features is the most accurate single model. The best deep model, LSTM + attention + Swish, reaches 147.4 EFC, or 140.4 EFC when its five runs are averaged.
+Table IV summarizes the results. The largest improvement comes from giving a model access to the capacity history: the error falls from 203.0 EFC for the conditions-only forest to 137.7–149.4 EFC for the other models. Among those, the random forest on fade features is the most accurate single model. The best deep model, LSTM + attention + Swish, achieves an MAE of 147.4 EFC, or 140.4 EFC when the predictions of its five runs are averaged.
 
 **Table IV. RUL prediction error on unseen experimental groups (EFC)**
 
@@ -247,11 +241,11 @@ Table IV shows the results. The biggest improvement comes from letting a model s
 
 Deep models: mean over five runs; ensemble = average of the five runs' predictions.
 
-The three deep variants are within 2.0 EFC of each other, while the same model trained from different random seeds varies by 3.7–5.4 EFC (standard deviation). With five runs per variant, this experiment cannot rank them. On the 3,671 tests that follow the first 30 cycles, where measured conditions would already be available (Section IV-B), the errors are 204.3, 133.9 and 142.9 EFC for the conditions-only forest, the fade-feature forest and the LSTM with attention and Swish (135.8 EFC for its ensemble), so the order of the models does not change. Fig. 8 in the appendix plots predicted against true RUL for the best model, and Fig. 7 follows four held-out cells through their life.
+The MAEs of the three deep variants are within 2.0 EFC of one another, whereas the MAE of the same model trained from different random seeds has a standard deviation of 3.7–5.4 EFC. With five runs per variant, the experiment therefore cannot rank the variants. On the 3,671 tests that follow the first 30 cycles, where measured conditions would already be available (Section IV-B), the MAEs are 204.3, 133.9 and 142.9 EFC for the conditions-only forest, the fade-feature forest and the LSTM with attention and Swish (135.8 EFC for its ensemble), so the ranking of the models is unchanged. Fig. 8 in the appendix plots the predicted against the true RUL for the best model, and Fig. 7 shows the predictions for four held-out cells over their lifetimes.
 
 ### B. Error over the life of a cell
 
-Fig. 5 breaks the error down by how much of its life a cell has already used. In the first 20%, every model is off by 218–226 EFC, and reading the capacity history gives no advantage over knowing the conditions alone. After that, the models that see the history improve steadily, down to 32–40 EFC in the last 20% of life. The conditions-only forest stays around 211–237 EFC until the final stage. Counted in weeks, the LSTM's median error fell below 15% of a cell's total life only after about six weekly tests.
+Fig. 5 breaks the error down by the share of life already used. In the first 20%, all models have errors of 218–226 EFC, and the capacity history provides no advantage over the usage conditions alone. Thereafter, the error of the models that use the history decreases steadily, to 32–40 EFC in the last 20% of life, whereas the conditions-only forest remains at about 211–237 EFC until the final stage. In terms of the number of tests, the median error of the LSTM fell below 15% of a cell's total life only after about six weekly tests.
 
 ![MAE of predicted RUL by the share of life already used](figures/error_over_life.png)
 
@@ -259,15 +253,15 @@ Fig. 5 breaks the error down by how much of its life a cell has already used. In
 
 ### C. Effect of the training procedure
 
-Getting the LSTM to this point took more work on training than on architecture. My first version (LSTM + Swish without attention, five inputs, full-batch training for 300 epochs) scored 159.1 EFC, clearly behind the random forest. I assumed it was undertrained and ran it for 800 epochs with a higher learning rate ($10^{-2}$) and a cosine schedule. The error went up to 199.3 EFC. The model was fitting the training conditions better and the new ones worse.
+Changes to the training procedure and inputs had a greater effect on prediction accuracy than changes to the architecture. The first version (LSTM + Swish without attention, five inputs, full-batch training for 300 epochs) had an MAE of 159.1 EFC, 21.4 EFC higher than that of the fade-feature forest. Extending training to 800 epochs with a higher learning rate ($10^{-2}$) and a cosine schedule increased the error to 199.3 EFC: the model fitted the training conditions more closely but generalized worse to unseen ones.
 
-What helped was close to the opposite of training longer: mini-batches, early stopping on held-out groups, and two extra inputs (capacity lost and fade slope). These changes brought the same architecture to 149.4 EFC. That 9.7 EFC gain is larger than anything attention or Swish produced. Fig. 9 in the appendix shows the validation curves used for early stopping.
+Mini-batch training, early stopping on held-out groups and two additional inputs (capacity lost and fade slope) instead reduced the error of the same architecture to 149.4 EFC. This improvement of 9.7 EFC is larger than the differences of at most 2.0 EFC among the architectural variants. Fig. 9 in the appendix shows the validation curves used for early stopping.
 
 ### D. Prediction intervals
 
-Table V compares the two ranges. The spread between training runs is narrow and contains the true RUL only 33% of the time: the five runs agree with each other much more than they agree with reality. The quantile LSTM's 10–90% range is wider and contains the true RUL 73% of the time, short of the intended 80%. Its width follows the error pattern in Fig. 5, from about 665 EFC in the first 20% of life down to 88 EFC in the last 20%. Its coverage, however, is below 80% in every stage and lowest at the end: in the last 20% of life it is 68.8%, so the true RUL fell outside the range for about 31% of those tests. A narrow range late in life is therefore not a sign that the prediction is reliable. Its median prediction has an MAE of 141.5 EFC, about the same as the five-run ensemble of the point model.
+Table V compares the two interval methods. The spread of training runs is narrow and contains the true RUL only 33% of the time: the five runs agree with one another far more closely than with the observed values. The 10–90% interval of the quantile LSTM is wider and contains the true RUL 73% of the time, short of the nominal 80%. Its width follows the error pattern in Fig. 5, decreasing from about 665 EFC in the first 20% of life to 88 EFC in the last 20%. Its coverage, however, is below 80% in every stage and lowest at the end: in the last 20% of life it is 68.8%, so the true RUL fell outside the interval for about 31% of those tests. A narrow interval late in life is therefore not an indication of reliability. The median prediction of the quantile LSTM has an MAE of 141.5 EFC, comparable to the 140.4 EFC of the five-run ensemble of the point model.
 
-**Table V. Coverage and median width of the prediction ranges on held-out groups**
+**Table V. Coverage and median width of the prediction intervals on held-out groups**
 
 | Share of life used | Run spread: coverage | Run spread: width (EFC) | Quantile 10–90%: coverage | Quantile 10–90%: width (EFC) |
 | --- | --- | --- | --- | --- |
@@ -278,35 +272,31 @@ Table V compares the two ranges. The spread between training runs is narrow and 
 | 60–80% | 33.6% | 98 | 73.5% | 253 |
 | 80–100% | 37.1% | 37 | 68.8% | 88 |
 
-Fig. 6 shows the range for the same four held-out cells as Fig. 7. For three of them the true RUL stays mostly inside the range. G63C4, the cell that outlived its group, stays above the range for most of its life.
+Fig. 6 shows the intervals for the same four held-out cells as Fig. 7. For three of them the true RUL lies mostly inside the interval; for G63C4, the cell that outlived its group, it lies above the interval for most of its life.
 
-![10-90% prediction range for four held-out cells](figures/prediction_intervals.png)
+![10-90% prediction interval for four held-out cells](figures/prediction_intervals.png)
 
-**Fig. 6.** Median prediction and 10–90% range of the quantile LSTM for four held-out cells.
+**Fig. 6.** Median prediction and 10–90% prediction interval of the quantile LSTM for four held-out cells.
 
 ## VI. Observations and Discussion
 
-Whether a model reads the capacity history matters far more than which model reads it. All models that saw the history ended up within about 12 EFC of each other, and all of them beat the conditions-only forest by 54–65 EFC.
+Access to the capacity history mattered far more than the choice of model: all models with this access outperformed the conditions-only forest by 54–65 EFC, whereas they differed from one another by at most 12 EFC.
 
-I think the LSTM did not beat the random forest for two reasons. First, the dataset is small for a sequence model: 245 cells with a median of 14 tests each. Second, the inputs are thin. There is one capacity value per week, and features such as capacity lost and fade slope already summarize the history. The forest gets that summary directly, while the LSTM has to learn it from relatively few examples.
+Two factors may explain why the LSTM did not outperform the random forest. The dataset is small for a sequence model (245 cells with a median of 14 tests), and the inputs are sparse: one capacity value per week, with the capacity lost and fade slope already summarizing the history. The forest receives this summary directly, whereas the LSTM must learn it from few examples. The absence of a measurable benefit from attention and Swish may likewise have two causes. With sequences this short, the LSTM state already carries the history, so attending to earlier states may add little, and in a network of about 11,000 parameters the choice of activation in a two-layer head may matter little.
 
-The three LSTM variants had mean absolute errors within 2.0 EFC of one another, less than the 3.7–5.4 EFC standard deviation between training seeds, so this experiment cannot show whether attention or Swish helps. One possible reason is that with sequences this short, the LSTM state already carries the history, so looking back over earlier states may add little. And in a network of about 11,000 parameters, the choice between Swish and ReLU in a two-layer head may matter little.
+All models perform poorly early in a cell's life, where an error of about 220 EFC corresponds to 28% of the median lifetime of 784 EFC. The fade curves in Fig. 2 explain this: capacity falls slowly at first and drops sharply after a knee, so in the first weeks a cell that will last 1,500 EFC resembles one that will last 500 EFC. Some cells also outlived their group. For G63C4 (Fig. 7), all models predicted only one-half to two-thirds of its true RUL early in life, and even the quantile interval missed it, because neither its usage nor its early capacity distinguished it from the rest of its group.
 
-The early part of a cell's life is where every model struggles. In the first 20% of life the error is about 220 EFC, close to 28% of the median lifetime of 784 EFC. The fade curves in Fig. 2 show why. Capacity falls slowly at first and then drops sharply after a knee, and in the first few weeks a cell that will last 1,500 EFC looks much like one that will last 500.
+The spread of repeated training runs is a poor measure of uncertainty, because the runs mainly disagree on details rather than on the difficult cases. Intervals must be trained for this purpose, as in the quantile LSTM, and even these were too narrow for unseen conditions, particularly late in life.
 
-Some cells also lived much longer than others in the same group. For G63C4 (Fig. 7), every model predicted only about half to two-thirds of its true RUL early on. Nothing in its usage conditions or early capacity set it apart, and even the quantile range missed it.
+These findings have practical implications for the applications in Section I-A. A warranty is set before any fade is observed, which corresponds to the conditions-only model, whose error (203.0 EFC) is about a quarter of the median lifetime. Predictions based on only a few early capacity tests are similarly uncertain and should be interpreted through their intervals rather than as point values, and a narrow interval late in life should not be taken as a guarantee.
 
-The prediction ranges taught me something I had not expected. Training the same model five times looks like a natural way to measure uncertainty, but the runs mostly disagree about details, not about the cases that are actually hard. A range has to be trained for the job, as the quantile LSTM is, and even then it covered 73% instead of 80% on unseen conditions. The early-life range of about 665 EFC is wide, but it is an honest statement of how little the first weeks reveal.
-
-The results also say something to the groups in Section I-A. A warranty is set before any fade has been measured, so a manufacturer is in the position of the conditions-only model, whose error of 203 EFC is about a quarter of the median lifetime. An owner who has checked the capacity only a few times early in life is hardly better off, and should read the prediction range rather than the single number. As more capacity checks come in, the range narrows, from about 665 EFC in the first 20% of life to 88 EFC in the last 20%, but late in life it still missed the true RUL for about 31% of tests, so a narrow range should not be over-trusted.
-
-This study has limitations. I chose the training settings using the same folds that produce the reported errors, so the deep-model errors are probably optimistic, by an amount I did not measure. The quantile ranges were also too narrow for unseen conditions (73% coverage instead of 80%). The first prediction of each cell assumes that its usage protocol is known in advance (Section IV-B). All cells were small 250 mAh cells tested at 30 °C with fixed currents, which may not carry over to batteries in real devices. Finally, my own laptop could not be evaluated: it has no fade history yet, and its discharge rate (about 0.25C) is below the range of the data.
+This study has several limitations. The training settings were selected on the same folds that produce the reported errors, so the deep-model errors are likely optimistic by an unmeasured amount. The first prediction of each cell assumes that its usage protocol is known in advance (Section IV-B). Finally, all cells were small 250 mAh cells cycled at 30 °C with constant currents, and the applicability of the model to batteries operating outside these experimental conditions, for example at other temperatures, under dynamic loads or at discharge rates below 0.49C, remains unverified.
 
 ## VII. Conclusion
 
-On usage conditions it had never seen, the LSTM with attention and Swish cut the error of a conditions-only model by about 27%, from 203.0 to 147.4 EFC. It did not beat a random forest given the same inputs, and the three LSTM variants had mean absolute errors within 2.0 EFC of one another, less than the variation between training seeds. The error changed more with the inputs and the training procedure than with the architecture. A quantile version gave a range that contained the true RUL 73% of the time, against 33% for the spread between training runs; late in life its range was narrow but still missed about 31% of tests.
+This study evaluated RUL prediction for lithium-ion cells on usage conditions excluded from training. Access to the capacity history reduced the MAE from 203.0 EFC to 137.7–149.4 EFC, but the LSTM with attention and Swish did not outperform a random forest given the same inputs, and the effects of attention and Swish could not be distinguished from seed-to-seed variation. The training procedure and inputs affected accuracy more than the architecture did. All models had large errors early in life, and the quantile LSTM, although better calibrated than the spread of training runs, did not reach its nominal coverage on unseen conditions.
 
-If I continued this work, I would give the sequence model richer inputs, such as the full voltage-capacity curve recorded at each weekly test, which Severson *et al.* found useful early in life [11]. Early life is also where all of the models here were weakest.
+Future work should provide richer inputs, such as the voltage–capacity curve recorded at each reference performance test, which improved early-life prediction in [11], and should calibrate the prediction intervals for unseen conditions.
 
 ## References
 
@@ -366,7 +356,7 @@ If I continued this work, I would give the sequence model richer inputs, such as
 
 ## Appendix B. Code
 
-All code is in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models, and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
+All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models, and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
 
 ### B.1 Model
 
