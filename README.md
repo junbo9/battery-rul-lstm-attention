@@ -328,7 +328,7 @@ This study has several limitations. The training settings were selected on the s
 
 ## VII. Conclusion
 
-This study evaluated RUL prediction for lithium-ion cells on usage conditions excluded from training. The capacity history reduced the MAE from 203.0 EFC to 137.7–149.4 EFC, mostly through the current capacity, but the LSTM with attention and Swish did not outperform a random forest given the same inputs, and the effects of attention and Swish were within seed-to-seed variation. In the first 20% of life, the mean lifetime of sibling cells predicted RUL better than any fitted model. Split-conformal calibration raised the coverage of the quantile intervals from 73% to 76%, short of the nominal 80%.
+This study evaluated RUL prediction for lithium-ion cells on usage conditions excluded from training. The capacity history reduced the MAE from 203.0 EFC to 137.7–149.4 EFC, in the forest mostly through the current capacity, but the LSTM with attention and Swish did not outperform a random forest given the same inputs, and the effects of attention and Swish were within seed-to-seed variation. In the first 20% of life, the mean lifetime of sibling cells predicted RUL better than any fitted model. Split-conformal calibration raised the coverage of the quantile intervals from 73% to 76%, short of the nominal 80%.
 
 Future work should provide inputs that reveal cell-to-cell differences before the capacity does, such as the voltage–capacity curve recorded at each reference performance test, which improved early-life prediction in [11].
 
