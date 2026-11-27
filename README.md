@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Battery lifetime depends on usage, so a lifetime model must generalize to usage conditions not seen in training. This study predicts the remaining useful life (RUL) of 245 lithium-polymer cells from the ISU-ILCC dataset, cycled under 63 combinations of charge rate, discharge rate and depth of discharge, and evaluates every model only on usage conditions excluded from training. An LSTM with causal self-attention and a Swish output head achieved a mean absolute error (MAE) of 147.4 equivalent full cycles (EFC), 27% lower than that of a random forest using only the usage conditions (203.0 EFC) but higher than that of one using the same inputs (137.7 EFC). The three LSTM variants had MAEs within 2.0 EFC of one another, and all models had errors above 200 EFC in the first 20% of a cell's life. A quantile LSTM quantified this uncertainty, but its 10–90% prediction interval contained the true RUL for only 73% of held-out tests and 69% late in life, against a nominal 80%.
+Battery lifetime depends on usage, so a lifetime model must generalize to usage conditions not seen in training. This study predicts the remaining useful life (RUL) of 245 lithium-polymer cells from the ISU-ILCC dataset, cycled under 63 combinations of charge rate, discharge rate and depth of discharge, and tests every model only on held-out conditions. An LSTM with causal self-attention and a Swish output head achieved a mean absolute error (MAE) of 147.4 equivalent full cycles (EFC), 27% lower than that of a random forest using only the usage conditions (203.0 EFC) but higher than that of one using the same inputs (137.7 EFC). The three LSTM variants had MAEs within 2.0 EFC of one another. Most of the remaining error came from differences between identically cycled cells, not from the unseen conditions: an oracle that knew each held-out condition's mean life still erred by 172 EFC and beat every model in the first 20% of life. Conformal calibration raised the coverage of a quantile LSTM's 10–90% interval from 73% to 79%, against a nominal 80%.
 
 **Index Terms:** lithium-ion battery, remaining useful life, LSTM, attention, Swish, deep learning
 
@@ -35,7 +35,7 @@ The main contributions of this study are as follows:
 1. **A per-test RUL dataset** constructed from the raw ISU-ILCC records: 3,956 capacity tests of 245 cells, each labelled with the RUL in equivalent full cycles and with usage conditions measured from the current records ([`data/rul_steps.csv`](data/rul_steps.csv)).
 2. **An LSTM with causal self-attention and a Swish output head**, compared with two random-forest baselines, one of which receives identical inputs.
 3. **An evaluation on unseen usage conditions**, in which entire experimental groups are held out, so that no test cell shares its conditions with a training cell.
-4. **Prediction intervals**: a quantile LSTM that provides 10–90% prediction intervals, with an assessment of their empirical coverage.
+4. **Error sources and calibrated intervals**: an oracle analysis that separates the error caused by unseen conditions from that caused by cell-to-cell variation, and a quantile LSTM whose 10–90% intervals are conformally calibrated.
 
 ## II. Related Work
 
@@ -199,7 +199,7 @@ flowchart TD
     F --> G["log RUL_k (EFC)"]
 ```
 
-The loss is the mean squared error of $\hat{y}_k$ over the real (unpadded) steps. The model is trained with Adam [16] at a learning rate of $3\times10^{-3}$ with weight decay $10^{-4}$ and mini-batches of 32 cells, and the output bias is initialized to the mean target. Training uses early stopping: 20% of the training groups are held out, the validation MAE is checked every two epochs, and training stops after 20 epochs without improvement (120 at most), keeping the best weights. The effect of these training choices is examined in Section V-C.
+The loss is the mean squared error of $\hat{y}_k$ over the real (unpadded) steps. The model is trained with Adam [16] at a learning rate of $3\times10^{-3}$ with weight decay $10^{-4}$ and mini-batches of 32 cells, and the output bias is initialized to the mean target. Training uses early stopping: 20% of the training groups are held out, the validation MAE is checked every two epochs, and training stops after 20 epochs without improvement (120 at most), keeping the best weights. The effect of these training choices is examined in Section V-D.
 
 ### D. Prediction intervals
 
@@ -214,14 +214,22 @@ $$
 
 For $\tau = 0.9$, under-prediction is penalized nine times more heavily than over-prediction, which drives that output toward the 90th percentile. A well-calibrated 10–90% interval therefore contains the true RUL 80% of the time. Training, early stopping and folds are the same as for the other deep models, and the five runs' percentiles are averaged. The share of held-out tests whose true RUL falls inside an interval is its *coverage*.
 
+**Conformal calibration.** Because the quantile interval may be too narrow for unseen conditions, it is widened in log space to $[\hat{y}^{(0.1)}-c,\ \hat{y}^{(0.9)}+c]$ by conformalized quantile regression [17]. The offset $c$ is the 80th percentile of the scores $\max(\hat{y}^{(0.1)}-y,\ y-\hat{y}^{(0.9)})$ of the out-of-fold predictions in the other four folds, taken separately for five bins of the predicted share of life used, $\mathrm{EFC}_k/(\mathrm{EFC}_k+\hat{r}^{(0.5)}_k)$, which is known at prediction time.
+
 ### E. Evaluation and baselines
 
 All models are evaluated with five-fold `GroupKFold` by experimental group, so every prediction is for a condition the model was not trained on. Each deep model is trained five times from different random seeds. Performance is reported as MAE and root mean squared error (RMSE) in EFC, and as the median relative error $|\hat{r}-r|/r$. The ensemble MAE is the error of the average of the five runs' predictions. The error is also broken down by the share of life already used, $\mathrm{EFC}_k / \mathrm{EFC}_{\mathrm{EOL}}$. Three deep variants are compared: LSTM + Swish (no attention), LSTM + attention + ReLU, and LSTM + attention + Swish.
 
-Two random forests [17] (300 trees, at least two samples per leaf) are trained on the same folds:
+Two random forests [18] (300 trees, at least two samples per leaf) are trained on the same folds:
 
 - **Conditions only** predicts the log total life from the three usage conditions. The RUL is the predicted total minus $\mathrm{EFC}_k$. This model does not use any capacity measurement of the cell.
 - **Fade features** receives the same seven inputs as the deep models at each test, but not the sequence; the capacity lost and fade slope provide a summary of the history.
+
+Three further analyses put these errors in context:
+
+- **Line through the last two tests**: extends the recent capacity trend to 200 mAh without any training. Until the capacity starts to fall it uses the conditions-only forest, and its predictions are capped at the largest RUL in the training folds.
+- **Oracle**: told the true mean life of each held-out group by the group's other cells, which no real model can know. Its error is the part caused by the spread between cells cycled identically.
+- **Learning curve**: the LSTM + attention + Swish and the fade-feature forest retrained on 20–100% of each fold's training groups, with five random subsets per size.
 
 ## V. Results
 
@@ -241,7 +249,7 @@ Table IV summarizes the results. The largest improvement comes from giving a mod
 
 Deep models: mean over five runs; ensemble = average of the five runs' predictions.
 
-The MAEs of the three deep variants are within 2.0 EFC of one another, whereas the MAE of the same model trained from different random seeds has a standard deviation of 3.7–5.4 EFC. With five runs per variant, the experiment therefore cannot rank the variants. On the 3,671 tests that follow the first 30 cycles, where measured conditions would already be available (Section IV-B), the MAEs are 204.3, 133.9 and 142.9 EFC for the conditions-only forest, the fade-feature forest and the LSTM with attention and Swish (135.8 EFC for its ensemble), so the ranking of the models is unchanged. Fig. 8 in the appendix plots the predicted against the true RUL for the best model, and Fig. 7 shows the predictions for four held-out cells over their lifetimes.
+The MAEs of the three deep variants are within 2.0 EFC of one another, whereas the MAE of the same model trained from different random seeds has a standard deviation of 3.7–5.4 EFC. With five runs per variant, the experiment therefore cannot rank the variants. On the 3,671 tests that follow the first 30 cycles, where measured conditions would already be available (Section IV-B), the MAEs are 204.3, 133.9 and 142.9 EFC for the conditions-only forest, the fade-feature forest and the LSTM with attention and Swish (135.8 EFC for its ensemble), so the ranking of the models is unchanged. Fig. 8 in the appendix plots the predicted against the true RUL for the best model, and Fig. 7 shows the predictions for four held-out cells over their lifetimes. The learning curve (Fig. 11 in the appendix) shows both models still improving with the full training set: with 10, 30 and 50 training groups per fold, the MAE of the LSTM fell from 194.6 to 160.7 to 147.4 EFC and that of the forest from 166.8 to 148.2 to 137.7 EFC, so the gap narrowed from 28 to 10 EFC.
 
 ### B. Error over the life of a cell
 
@@ -249,28 +257,38 @@ Fig. 5 breaks the error down by the share of life already used. In the first 20%
 
 ![MAE of predicted RUL by the share of life already used](figures/error_over_life.png)
 
-**Fig. 5.** MAE of predicted RUL by the share of life already used. Deep models are shown as five-run ensembles.
+**Fig. 5.** MAE of predicted RUL by the share of life already used. Deep models are shown as five-run ensembles; the gray line is the oracle that knows each held-out group's mean life.
 
-### C. Effect of the training procedure
+### C. Where the error comes from
+
+On the 3,923 tests whose group has another cell, the oracle has an MAE of 171.7 EFC, against 202.9 EFC for the conditions-only forest. Not knowing a condition's mean life therefore adds about 31 EFC, whereas 172 EFC come from the spread between cells cycled identically. In the first 20% of life every model (219–223 EFC) is less accurate than the oracle (179 EFC), and the models that use the capacity history overtake it only after about 40% of life (Fig. 5).
+
+The held-out conditions were rarely extrapolations: only 8 of the 63 groups lay outside the training range in any condition, and a group's relative error was not correlated with the distance from its condition to the nearest training condition (Spearman ρ = 0.06–0.20, p ≥ 0.12). The LSTM ensemble was more accurate than the fade-feature forest for cells cycled beyond 40% DoD (114.0 vs. 122.4 EFC at 40–80% and 84.1 vs. 87.9 EFC above 80%) but less accurate for the long-lived cells cycled at most 40% DoD (196.4 vs. 179.1 EFC).
+
+The straight line through the last two tests was far less accurate than either learned model, with an MAE of 396.5 EFC overall and 86.0 EFC in the last 20% of life, against 32.4 and 39.6 EFC. Lines through the last 3, 4 or 6 tests were worse.
+
+### D. Effect of the training procedure
 
 Changes to the training procedure and inputs had a greater effect on prediction accuracy than changes to the architecture. The first version (LSTM + Swish without attention, five inputs, full-batch training for 300 epochs) had an MAE of 159.1 EFC, 21.4 EFC higher than that of the fade-feature forest. Extending training to 800 epochs with a higher learning rate ($10^{-2}$) and a cosine schedule increased the error to 199.3 EFC: the model fitted the training conditions more closely but generalized worse to unseen ones.
 
 Mini-batch training, early stopping on held-out groups and two additional inputs (capacity lost and fade slope) instead reduced the error of the same architecture to 149.4 EFC. This improvement of 9.7 EFC is larger than the differences of at most 2.0 EFC among the architectural variants. Fig. 9 in the appendix shows the validation curves used for early stopping.
 
-### D. Prediction intervals
+### E. Prediction intervals
 
-Table V compares the two interval methods. The spread of training runs is narrow and contains the true RUL only 33% of the time: the five runs agree with one another far more closely than with the observed values. The 10–90% interval of the quantile LSTM is wider and contains the true RUL 73% of the time, short of the nominal 80%. Its width follows the error pattern in Fig. 5, decreasing from about 665 EFC in the first 20% of life to 88 EFC in the last 20%. Its coverage, however, is below 80% in every stage and lowest at the end: in the last 20% of life it is 68.8%, so the true RUL fell outside the interval for about 31% of those tests. A narrow interval late in life is therefore not an indication of reliability. The median prediction of the quantile LSTM has an MAE of 141.5 EFC, comparable to the 140.4 EFC of the five-run ensemble of the point model.
+Table V compares the interval methods. The spread of training runs is narrow and contains the true RUL only 33% of the time: the five runs agree with one another far more closely than with the observed values. The 10–90% interval of the quantile LSTM is wider and contains the true RUL 73% of the time, short of the nominal 80%. Its width follows the error pattern in Fig. 5, decreasing from about 665 EFC in the first 20% of life to 88 EFC in the last 20%, where its coverage is lowest (68.8%), so the true RUL fell outside the interval for about 31% of those tests.
+
+Conformal calibration raised the coverage to 78.7% overall and to 76–81% in every stage, including 76.1% in the last 20% of life, at the cost of intervals 16% wider (median 420 instead of 362 EFC). Coverage remained uneven across groups: its median was 86%, but it stayed below 50% for 5 of the 63 groups. The median prediction of the quantile LSTM has an MAE of 141.5 EFC, comparable to the 140.4 EFC of the five-run ensemble of the point model.
 
 **Table V. Coverage and median width of the prediction intervals on held-out groups**
 
-| Share of life used | Run spread: coverage | Run spread: width (EFC) | Quantile 10–90%: coverage | Quantile 10–90%: width (EFC) |
-| --- | --- | --- | --- | --- |
-| All | 32.6% | 106 | 73.2% | 362 |
-| 0–20% | 27.6% | 151 | 76.4% | 665 |
-| 20–40% | 31.3% | 152 | 74.4% | 493 |
-| 40–60% | 34.6% | 134 | 72.6% | 371 |
-| 60–80% | 33.6% | 98 | 73.5% | 253 |
-| 80–100% | 37.1% | 37 | 68.8% | 88 |
+| Share of life used | Run spread: coverage | Run spread: width (EFC) | Quantile: coverage | Quantile: width (EFC) | Conformal: coverage | Conformal: width (EFC) |
+| --- | --- | --- | --- | --- | --- | --- |
+| All | 32.6% | 106 | 73.2% | 362 | 78.7% | 420 |
+| 0–20% | 27.6% | 151 | 76.4% | 665 | 79.7% | 703 |
+| 20–40% | 31.3% | 152 | 74.4% | 493 | 78.4% | 555 |
+| 40–60% | 34.6% | 134 | 72.6% | 371 | 78.6% | 442 |
+| 60–80% | 33.6% | 98 | 73.5% | 253 | 80.8% | 306 |
+| 80–100% | 37.1% | 37 | 68.8% | 88 | 76.1% | 114 |
 
 Fig. 6 shows the intervals for the same four held-out cells as Fig. 7. For three of them the true RUL lies mostly inside the interval; for G63C4, the cell that outlived its group, it lies above the interval for most of its life.
 
@@ -280,23 +298,21 @@ Fig. 6 shows the intervals for the same four held-out cells as Fig. 7. For three
 
 ## VI. Observations and Discussion
 
-Access to the capacity history mattered far more than the choice of model: all models with this access outperformed the conditions-only forest by 54–65 EFC, whereas they differed from one another by at most 12 EFC.
+The central finding is that most of the error on unseen conditions does not come from the conditions being unseen. The oracle of Section V-C knew each held-out condition's mean life and still erred by 172 EFC, only 31 EFC less than the conditions-only forest. The difficulty lies in cells cycled identically that age differently, and early in life this variation does not show in the capacity: capacity falls slowly at first and drops sharply after a knee (Fig. 2), so in the first weeks a cell that will last 1,500 EFC resembles one that will last 500 EFC. Knees can arise from several mechanisms, including lithium plating, electrode saturation, resistance growth and electrolyte depletion, some of which build up with little electrochemical signature beforehand [19]. G63C4 (Fig. 7) is an example: neither its usage nor its early capacity distinguished it from its group, and all models predicted only one-half to two-thirds of its true RUL early in life.
 
-Two factors may explain why the LSTM did not outperform the random forest. The dataset is small for a sequence model (245 cells with a median of 14 tests), and the inputs are sparse: one capacity value per week, with the capacity lost and fade slope already summarizing the history. The forest receives this summary directly, whereas the LSTM must learn it from few examples. The absence of a measurable benefit from attention and Swish may likewise have two causes. With sequences this short, the LSTM state already carries the history, so attending to earlier states may add little, and in a network of about 11,000 parameters the choice of activation in a two-layer head may matter little.
+Two factors may explain why the LSTM did not outperform the random forest. The dataset is small for a sequence model (245 cells with a median of 14 tests), and the inputs are sparse: one capacity value per week, with the capacity lost and fade slope already summarizing the history. The learning curve supports the first factor, since the LSTM gained more than the forest from added groups; both were still improving at about 50 groups, however, so whether the LSTM would overtake the forest with more data remains open. The absence of a measurable benefit from attention and Swish is consistent with sequences this short, whose history the LSTM state already carries. The learned models nevertheless add value: extrapolating the capacity trend was two to three times less accurate even in the last 20% of life, where extrapolation should be easiest.
 
-All models perform poorly early in a cell's life, where an error of about 220 EFC corresponds to 28% of the median lifetime of 784 EFC. The fade curves in Fig. 2 explain this: capacity falls slowly at first and drops sharply after a knee, so in the first weeks a cell that will last 1,500 EFC resembles one that will last 500 EFC. Some cells also outlived their group. For G63C4 (Fig. 7), all models predicted only one-half to two-thirds of its true RUL early in life, and even the quantile interval missed it, because neither its usage nor its early capacity distinguished it from the rest of its group.
+The spread of repeated training runs is a poor measure of uncertainty, because the runs mainly disagree on details rather than on the difficult cases. A trained quantile interval was better, and conformal calibration brought its coverage close to the nominal level at a 16% cost in width. The calibration is only approximate here, because tests within a group are correlated, and it cannot repair groups whose cells behave unlike those seen in training.
 
-The spread of repeated training runs is a poor measure of uncertainty, because the runs mainly disagree on details rather than on the difficult cases. Intervals must be trained for this purpose, as in the quantile LSTM, and even these were too narrow for unseen conditions, particularly late in life.
-
-These findings have practical implications for the applications in Section I-A. A warranty is set before any fade is observed, which corresponds to the conditions-only model, whose error (203.0 EFC) is about a quarter of the median lifetime. Predictions based on only a few early capacity tests are similarly uncertain and should be interpreted through their intervals rather than as point values, and a narrow interval late in life should not be taken as a guarantee.
+These findings have practical implications for the applications in Section I-A. A warranty is set before any fade is observed, which corresponds to the conditions-only model, whose error (203.0 EFC) is about a quarter of the median lifetime of 784 EFC. Predictions based on a few early capacity tests are similarly uncertain and should be read as intervals, and a narrow interval late in life is not a guarantee.
 
 This study has several limitations. The training settings were selected on the same folds that produce the reported errors, so the deep-model errors are likely optimistic by an unmeasured amount. The first prediction of each cell assumes that its usage protocol is known in advance (Section IV-B). Finally, all cells were small 250 mAh cells cycled at 30 °C with constant currents, and the applicability of the model to batteries operating outside these experimental conditions, for example at other temperatures, under dynamic loads or at discharge rates below 0.49C, remains unverified.
 
 ## VII. Conclusion
 
-This study evaluated RUL prediction for lithium-ion cells on usage conditions excluded from training. Access to the capacity history reduced the MAE from 203.0 EFC to 137.7–149.4 EFC, but the LSTM with attention and Swish did not outperform a random forest given the same inputs, and the effects of attention and Swish could not be distinguished from seed-to-seed variation. The training procedure and inputs affected accuracy more than the architecture did. All models had large errors early in life, and the quantile LSTM, although better calibrated than the spread of training runs, did not reach its nominal coverage on unseen conditions.
+This study evaluated RUL prediction for lithium-ion cells on usage conditions excluded from training. The capacity history reduced the MAE from 203.0 EFC to 137.7–149.4 EFC, but the LSTM with attention and Swish did not outperform a random forest given the same inputs, and the effects of attention and Swish were within seed-to-seed variation. Most of the remaining error came from differences between cells cycled identically rather than from the unseen conditions, and in the first 20% of life every model was less accurate than an oracle that knew each condition's mean life. Conformal calibration raised the coverage of the quantile intervals from 73% to 79%.
 
-Future work should provide richer inputs, such as the voltage–capacity curve recorded at each reference performance test, which improved early-life prediction in [11], and should calibrate the prediction intervals for unseen conditions.
+Future work should provide inputs that reveal cell-to-cell differences before the capacity does, such as the voltage–capacity curve recorded at each reference performance test, which improved early-life prediction in [11].
 
 ## References
 
@@ -332,7 +348,11 @@ Future work should provide richer inputs, such as the voltage–capacity curve r
 
 [16] D. P. Kingma and J. Ba, "Adam: A method for stochastic optimization," in *Proc. Int. Conf. Learning Representations (ICLR)*, 2015.
 
-[17] L. Breiman, "Random forests," *Machine Learning*, vol. 45, no. 1, pp. 5–32, 2001.
+[17] Y. Romano, E. Patterson, and E. J. Candès, "Conformalized quantile regression," in *Advances in Neural Information Processing Systems 32 (NeurIPS)*, 2019, pp. 3543–3553.
+
+[18] L. Breiman, "Random forests," *Machine Learning*, vol. 45, no. 1, pp. 5–32, 2001.
+
+[19] P. M. Attia *et al.*, "Review—'Knees' in lithium-ion battery aging trajectories," *Journal of The Electrochemical Society*, vol. 169, no. 6, Art. no. 060517, 2022.
 
 ---
 
@@ -354,9 +374,13 @@ Future work should provide richer inputs, such as the voltage–capacity curve r
 
 **Fig. 10.** The Swish and ReLU activation functions.
 
+![Learning curve](figures/learning_curve.png)
+
+**Fig. 11.** Learning curve: MAE on held-out groups against the number of training groups per fold (mean and standard deviation over five random subsets).
+
 ## Appendix B. Code
 
-All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models, and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
+All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models and runs the follow-up analyses (oracle, conformal calibration, extrapolation baseline, learning curve), and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
 
 ### B.1 Model
 

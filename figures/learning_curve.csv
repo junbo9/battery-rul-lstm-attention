@@ -1,0 +1,8 @@
+,LSTM + attention + Swish,LSTM + attention + Swish,"RF, fade features","RF, fade features"
+,mean,std,mean,std
+training groups,,,,
+10.0,194.6,11.1,166.8,16.0
+20.0,185.6,19.3,157.6,14.6
+30.4,160.7,5.9,148.2,6.4
+40.4,156.1,8.9,141.6,2.7
+50.4,147.4,4.6,137.7,0.0
