@@ -231,6 +231,7 @@ Further analyses put these errors in context:
 - **Same-condition benchmark**: predicts each held-out cell from the mean life of the other cells of its group, information that no deployed model has.
 - **Feature ablation**: the inputs of the fade-feature forest are added to the usage conditions one at a time, on the same folds and with the same settings.
 - **Learning curve**: the LSTM + attention + Swish and the fade-feature forest retrained on 20–100% of each fold's training groups, with five random subsets per size.
+- **Voltage-curve features**: the C/5 discharge curve of every weekly test is interpolated to the discharged capacity $Q(V)$ on 3.40–4.05 V, the range covered by every curve. The change since the first test, $\Delta Q(V) = Q_k(V) - Q_0(V)$, is summarized by its mean, minimum and log variance, as in [11]. Four further features are the C/2-to-C/5 capacity ratio, the voltage and height of the largest $dQ/dV$ peak, and the capacity discharged down to 3.40 V. The fade-feature forest and the LSTM + attention + Swish are retrained with these inputs on the same folds.
 
 ## V. Results
 
@@ -314,9 +315,29 @@ Fig. 6 shows the intervals for the same four held-out cells as Fig. 7. For three
 
 **Fig. 6.** Median prediction and 10–90% prediction interval of the quantile LSTM for four held-out cells.
 
+### F. Features of the voltage curve
+
+Features of the weekly voltage curve improved the forest, but not the prediction early in life (Table VII). Adding the three $\Delta Q(V)$ summaries reduced the forest's MAE from 137.7 to 132.2 EFC. In a bootstrap over the 63 groups, the change was −5.5 EFC (95% interval −10.2 to −1.0 EFC), and 40 of the 63 groups improved. Most of the gain came at 20–60% of life (−13.6 EFC). In the first 20% of life, the change was −3.1 EFC (95% interval −8.6 to +3.4 EFC), and the forest (214.9 EFC) stayed well behind the same-condition benchmark (178.5 EFC). The four other curve features added little. For the LSTM, adding $\Delta Q(V)$ changed the MAE from 147.4 to 145.5 EFC, within the seed-to-seed spread.
+
+The curve carries slightly more information about an individual cell than the capacity does, but not enough. Within groups, the mean of $\Delta Q(V)$ in weeks 2–4 had Spearman correlations of 0.22–0.28 with total life, compared with 0.08–0.17 for the capacity.
+
+**Table VII. Error with features of the voltage curve (MAE in EFC, same folds)**
+
+| Model | MAE | Cell-avg MAE | 0–20% | 20–40% | 40–60% | 60–80% | 80–100% |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RF, seven inputs | 137.7 | 120.7 | 218.0 | 185.6 | 156.6 | 92.1 | **32.4** |
+| RF + $\Delta Q(V)$ | 132.2 | 116.1 | 214.9 | **174.7** | **140.4** | 90.0 | 34.2 |
+| RF + all curve features | **132.0** | **115.3** | **212.2** | 176.9 | 142.6 | **89.0** | 33.7 |
+| LSTM + attention + Swish | 147.4 | 130.2 | 230.9 | 199.3 | 154.1 | 104.8 | 42.2 |
+| LSTM + attention + Swish + $\Delta Q(V)$ | 145.5 | 129.1 | 224.5 | 195.0 | 155.6 | 102.1 | 45.6 |
+| LSTM + attention + Swish, ensemble | 140.4 | 124.3 | 223.0 | 189.8 | 145.0 | 98.2 | 39.6 |
+| LSTM + attention + Swish + $\Delta Q(V)$, ensemble | 138.6 | 123.3 | 216.2 | 186.6 | 147.3 | 95.1 | 42.5 |
+
+Columns 0–20% to 80–100%: share of life already used. Deep models: mean over five runs, or the ensemble of the five runs. Same-condition benchmark in the first 20% of life: 178.5 EFC.
+
 ## VI. Observations and Discussion
 
-The comparison with the same-condition benchmark is the most informative result. In the first 20% of life, the lifetimes of sibling cells predicted RUL better than any model that observed the cell's own capacity. Cells cycled identically age differently, and early in life this does not show in the capacity: capacity falls slowly at first and drops sharply after a knee (Fig. 2), so in the first weeks a cell that will last 1,500 EFC resembles one that will last 500 EFC. Knees can arise from several mechanisms, including lithium plating, electrode saturation, resistance growth and electrolyte depletion, some of which build up with little electrochemical signature beforehand [19]. G63C4 (Fig. 7) is an example: neither its usage nor its early capacity distinguished it from its group, and all models predicted only one-half to two-thirds of its true RUL early in life.
+The comparison with the same-condition benchmark is the most informative result. In the first 20% of life, the lifetimes of sibling cells predicted RUL better than any model that observed the cell's own capacity. Cells cycled identically age differently, and early in life this does not show in the capacity: capacity falls slowly at first and drops sharply after a knee (Fig. 2), so in the first weeks a cell that will last 1,500 EFC resembles one that will last 500 EFC. Knees can arise from several mechanisms, including lithium plating, electrode saturation, resistance growth and electrolyte depletion, some of which build up with little electrochemical signature beforehand [19]. G63C4 (Fig. 7) is an example: neither its usage nor its early capacity distinguished it from its group, and all models predicted only one-half to two-thirds of its true RUL early in life. Summary features of the weekly voltage curve did not close this early-life gap (Section V-F).
 
 The feature ablation explains much of the forest's strength: most of its gain over the conditions-only model comes from the current capacity, which it receives directly, whereas the LSTM must learn such summaries from 245 sequences with a median of 14 tests. The inputs are also sparse: one capacity value per week, with the capacity lost and fade slope already summarizing the history. The learning curve is consistent with this data limitation, since the LSTM gained more than the forest from added groups; both were still improving at about 50 groups, however, so whether the LSTM would overtake the forest with more data remains open. The absence of a measurable benefit from attention and Swish is consistent with sequences this short, whose history the LSTM state already carries. The learned models nevertheless add value: extrapolating the capacity trend was two to three times less accurate even in the last 20% of life, where extrapolation should be easiest.
 
@@ -330,7 +351,7 @@ This study has several limitations. The training settings were selected on the s
 
 This study evaluated RUL prediction for lithium-ion cells on usage conditions excluded from training. The capacity history reduced the MAE from 203.0 EFC to 137.7–149.4 EFC, in the forest mostly through the current capacity, but the LSTM with attention and Swish did not outperform a random forest given the same inputs, and the effects of attention and Swish were within seed-to-seed variation. In the first 20% of life, the mean lifetime of sibling cells predicted RUL better than any fitted model. Split-conformal calibration raised the coverage of the quantile intervals from 73% to 76%, short of the nominal 80%.
 
-Future work should provide inputs that reveal cell-to-cell differences before the capacity does, such as the voltage–capacity curve recorded at each reference performance test, which improved early-life prediction in [11].
+Features of the weekly voltage–capacity curve, which improved early-life prediction in [11], lowered the forest's MAE to 132.2 EFC but did not improve the first 20% of life. Future work should therefore look for earlier signs of cell-to-cell differences, for example in the cycling data between the weekly tests.
 
 ## References
 
@@ -398,7 +419,7 @@ Future work should provide inputs that reveal cell-to-cell differences before th
 
 ## Appendix B. Code
 
-All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models and runs the follow-up analyses (same-condition benchmark, split-conformal calibration, extrapolation baseline, feature ablation, learning curve), and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
+All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset (`data/rul_steps.csv`) and the voltage-curve features (`data/dqv_features.csv`) from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models and runs the follow-up analyses (same-condition benchmark, split-conformal calibration, extrapolation baseline, feature ablation, voltage-curve features, learning curve), and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
 
 ### B.1 Model
 
