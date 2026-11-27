@@ -421,7 +421,7 @@ Three $\Delta Q(V)$ summaries of the weekly voltage–capacity curve, a feature 
 
 ## Appendix B. Code
 
-All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset (`data/rul_steps.csv`) and the voltage-curve features (`data/dqv_features.csv`) from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models and runs the follow-up analyses (same-condition benchmark, split-conformal calibration, extrapolation baseline, feature ablation, voltage-curve features, learning curve), and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The excerpts below show the model and the training loop.
+All code is available in this repository. [`01_build_dataset.ipynb`](01_build_dataset.ipynb) builds the dataset (`data/rul_steps.csv`) and the voltage-curve features (`data/dqv_features.csv`) from the raw records, [`02_train_models.ipynb`](02_train_models.ipynb) trains and evaluates all models and runs the follow-up analyses (same-condition benchmark, split-conformal calibration, extrapolation baseline, feature ablation, voltage-curve features, learning curve), and [`make_data_figures.py`](make_data_figures.py) draws Figs. 1 and 3 from `data/rul_steps.csv`. The LaTeX source of the full IEEE-format report, including its appendices, is in [`paper/report_full.tex`](paper/report_full.tex). The excerpts below show the model and the training loop.
 
 ### B.1 Model
 
