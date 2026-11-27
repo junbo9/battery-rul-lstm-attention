@@ -2,7 +2,7 @@
 
 **MASC 520 Final Project**
 
-[Your Name], [Department], [University]
+Junbo Shim, Mork Family Department of Chemical Engineering and Materials Science, University of Southern California
 
 ---
 
