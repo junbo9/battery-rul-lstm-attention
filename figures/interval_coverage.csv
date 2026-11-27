@@ -11,9 +11,15 @@ Spread of five runs,80-100%,37.1,36.8
 "Quantile LSTM, 10-90%",40-60%,72.6,370.5
 "Quantile LSTM, 10-90%",60-80%,73.5,253.2
 "Quantile LSTM, 10-90%",80-100%,68.8,88.2
-"Conformal quantile LSTM, 10-90%",All,78.7,419.6
-"Conformal quantile LSTM, 10-90%",0-20%,79.7,703.0
-"Conformal quantile LSTM, 10-90%",20-40%,78.4,554.8
-"Conformal quantile LSTM, 10-90%",40-60%,78.6,441.5
-"Conformal quantile LSTM, 10-90%",60-80%,80.8,306.1
-"Conformal quantile LSTM, 10-90%",80-100%,76.1,113.5
+Quantile LSTM on 80% of training groups,All,73.2,386.1
+Quantile LSTM on 80% of training groups,0-20%,75.9,699.6
+Quantile LSTM on 80% of training groups,20-40%,73.3,531.1
+Quantile LSTM on 80% of training groups,40-60%,72.9,409.6
+Quantile LSTM on 80% of training groups,60-80%,73.0,271.5
+Quantile LSTM on 80% of training groups,80-100%,70.3,100.1
+Split-conformal quantile LSTM,All,76.2,444.1
+Split-conformal quantile LSTM,0-20%,78.2,720.1
+Split-conformal quantile LSTM,20-40%,79.1,599.2
+Split-conformal quantile LSTM,40-60%,76.3,475.7
+Split-conformal quantile LSTM,60-80%,75.7,302.8
+Split-conformal quantile LSTM,80-100%,71.8,100.6

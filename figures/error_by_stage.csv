@@ -1,4 +1,4 @@
-Share of life used,"RF, conditions only","RF, fade features",LSTM + Swish,LSTM + attention + ReLU,LSTM + attention + Swish,Oracle: true mean life of the group
+Share of life used,"RF, conditions only","RF, fade features",LSTM + Swish,LSTM + attention + ReLU,LSTM + attention + Swish,Benchmark: mean life of other cells in the group
 0-20%,219.0,218.0,226.0,221.0,223.0,179.0
 20-40%,229.0,186.0,196.0,190.0,190.0,190.0
 40-60%,237.0,157.0,151.0,148.0,145.0,194.0
